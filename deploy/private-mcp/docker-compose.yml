@@ -4,12 +4,6 @@ services:
     restart: unless-stopped
     tty: true
     shm_size: 512mb
-    cap_drop:
-      - ALL
-    cap_add:
-      - DAC_OVERRIDE
-    security_opt:
-      - no-new-privileges:true
     environment:
       COOKIES_PATH: /app/data/cookies.json
       HOME: /app/data/home
@@ -18,7 +12,7 @@ services:
       XHS_PROXY: ${XHS_PROXY:-}
     volumes:
       - ${XHS_DATA_DIR:-./data}:/app/data
-      - ${XHS_MEDIA_DIR:-./images}:/app/images:ro
+      - ${XHS_MEDIA_DIR:-./images}:/app/images
     ports:
       - "127.0.0.1:${XHS_MCP_PORT:-18060}:18060"
     networks:
