@@ -44,6 +44,16 @@ Do not put cookies, the real `.env`, or other runtime data into Git.
 
 ## 3. Validate and start
 
+Before starting on a small VPS, check the resources already used by other services:
+
+```bash
+free -h
+df -h
+docker stats --no-stream
+```
+
+This service starts Chromium. If the VPS is already close to its memory limit, do not start it yet; add memory/swap headroom or move the service to a separate host first.
+
 Run these commands from `deploy/private-mcp/`:
 
 ```bash
