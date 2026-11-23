@@ -5,7 +5,7 @@ This deployment profile keeps the MCP service off the public network:
 - The host port is bound to `127.0.0.1`, not `0.0.0.0`.
 - A non-empty `AUTH_TOKEN` is mandatory.
 - Login cookies and runtime state persist in `data/`.
-- Publishing media is mounted read-only from `images/`.
+- The media directory is persistent and writable, matching the upstream image workflow.
 - The image is pinned to upstream release `v2.7.4`; update it deliberately after reviewing release notes.
 
 It does not change the upstream `docker/docker-compose.yml`.
@@ -64,7 +64,7 @@ docker compose ps
 docker compose logs --tail=100 xiaohongshu-mcp
 ```
 
-The configuration check fails if `AUTH_TOKEN` is missing or empty. The service is published only on host loopback at `127.0.0.1:18060`.
+The configuration check fails if `AUTH_TOKEN` is missing or empty. The service is published only on host loopback at `127.0.0.1:18060`. The compose profile intentionally keeps the upstream Chromium runtime's normal container capabilities and writable media directory; only the host bind address and mandatory bearer token are tightened here.
 
 Verify the bind address:
 
