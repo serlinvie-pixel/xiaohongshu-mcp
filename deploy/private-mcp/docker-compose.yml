@@ -1,0 +1,29 @@
+services:
+  xiaohongshu-mcp:
+    image: ${XHS_IMAGE:-xpzouying/xiaohongshu-mcp:v2.7.4}
+    restart: unless-stopped
+    tty: true
+    shm_size: 512mb
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      COOKIES_PATH: /app/data/cookies.json
+      HOME: /app/data/home
+      XDG_CONFIG_HOME: /app/data/config
+      AUTH_TOKEN: "${AUTH_TOKEN:?Set a non-empty AUTH_TOKEN in .env}"
+      XHS_PROXY: ${XHS_PROXY:-}
+    volumes:
+      - ${XHS_DATA_DIR:-./data}:/app/data
+      - ${XHS_MEDIA_DIR:-./images}:/app/images:ro
+    ports:
+      - "127.0.0.1:${XHS_MCP_PORT:-18060}:18060"
+    networks:
+      - mcp-private
+
+networks:
+  mcp-private:
+    name: ${XHS_DOCKER_NETWORK:-xiaohongshu-mcp-net}
