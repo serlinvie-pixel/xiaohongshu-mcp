@@ -27,7 +27,7 @@ For this pinned image, `uname -m` should report `x86_64`. If it reports `aarch64
 Clone your fork, then enter this folder:
 
 ```bash
-git clone https://github.com/serlinvie-pixel/xiaohongshu-mcp.git
+git clone --branch deploy/private-mcp https://github.com/serlinvie-pixel/xiaohongshu-mcp.git
 cd xiaohongshu-mcp/deploy/private-mcp
 cp .env.example .env
 openssl rand -hex 32
