@@ -109,16 +109,18 @@ func rednoteLoginDiagnostics(page *rod.Page) string {
 		// Do not log raw URLs: path segments and query parameters may
 		// contain personal identifiers or one-time login tokens.
 		const pathname = location.pathname || "/";
-		const normalized = pathname.length > 1
-			? pathname.replace(/\\/+$, "") : pathname;
+		const normalized = pathname.length > 1 && pathname.endsWith("/")
+			? pathname.slice(0, -1) : pathname;
+		const startsRoute = name => normalized === "/" + name ||
+			normalized.startsWith("/" + name + "/");
 		let pathCategory = "other";
 		if (normalized === "/") pathCategory = "home";
-		else if (normalized === "/login") pathCategory = "login";
-		else if (normalized === "/explore") pathCategory = "explore";
-		else if (/^\\/(user|profile)(\\/|$)/.test(normalized)) pathCategory = "profile";
-		else if (/^\\/(search|search_result)(\\/|$)/.test(normalized)) pathCategory = "search";
-		else if (/^\\/(notification|notifications)(\\/|$)/.test(normalized)) pathCategory = "notification";
-		else if (/^\\/(feed|discovery)(\\/|$)/.test(normalized)) pathCategory = "feed";
+		else if (startsRoute("login")) pathCategory = "login";
+		else if (startsRoute("explore")) pathCategory = "explore";
+		else if (startsRoute("user") || startsRoute("profile")) pathCategory = "profile";
+		else if (startsRoute("search") || startsRoute("search_result")) pathCategory = "search";
+		else if (startsRoute("notification") || startsRoute("notifications")) pathCategory = "notification";
+		else if (startsRoute("feed") || startsRoute("discovery")) pathCategory = "feed";
 		return JSON.stringify({
 			path_category: pathCategory,
 			path_segment_count: pathname.split("/").filter(Boolean).length,
