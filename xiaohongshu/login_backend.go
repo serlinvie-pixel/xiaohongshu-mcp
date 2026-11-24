@@ -88,3 +88,63 @@ func rednoteSessionCookiePresent(page *rod.Page) (bool, error) {
 	}
 	return hasSession && hasIdentity, nil
 }
+
+
+// Safe login diagnostic: only boolean page state and cookie presence.
+// Never log cookie values, URL query strings, nicknames, or user IDs.
+func rednoteLoginDiagnostics(page *rod.Page) string {
+	res, err := page.Eval(`() => {
+		const unwrap = value => {
+			if (!value || typeof value !== "object") return value;
+			return value.value !== undefined ? value.value :
+				(value._value !== undefined ? value._value : value);
+		};
+		const user = window.__INITIAL_STATE__ && window.__INITIAL_STATE__.user;
+		const candidates = user ? [user.userInfo, user.currentUser, user.me] : [];
+		const infos = candidates.map(unwrap).filter(value =>
+			value && typeof value === "object");
+		const hasIdentity = infos.some(value => value.guest !== true &&
+			Boolean(value.userId || value.user_id || value.nickname));
+		const guest = infos.some(value => value.guest === true);
+		return JSON.stringify({
+			rednote_origin: location.hostname === "rednote.com" ||
+				location.hostname.endsWith(".rednote.com"),
+			login_path: location.pathname === "/login",
+			explore_path: location.pathname === "/explore",
+			sidebar_present: Boolean(document.querySelector(".main-container .user .link-wrapper .channel")),
+			login_button_present: Boolean(document.querySelector("#login-btn")),
+			user_state_present: Boolean(user),
+			identity_present: hasIdentity,
+			guest_present: guest
+		});
+	}`)
+	if err != nil {
+		return "page_state_unavailable"
+	}
+	return res.Value.String()
+}
+
+// Only the presence of named cookies is returned, never their values.
+func rednoteCookiePresence(page *rod.Page) (bool, bool, error) {
+	cks, err := page.Browser().GetCookies()
+	if err != nil {
+		return false, false, err
+	}
+	hasSession, hasID := false, false
+	for _, c := range cks {
+		if c == nil || c.Value == "" {
+			continue
+		}
+		domain := strings.TrimPrefix(strings.ToLower(c.Domain), ".")
+		if domain != "rednote.com" && !strings.HasSuffix(domain, ".rednote.com") {
+			continue
+		}
+		if c.Name == "web_session" {
+			hasSession = true
+		}
+		if c.Name == "id_token" {
+			hasID = true
+		}
+	}
+	return hasSession, hasID, nil
+}
