@@ -20,20 +20,15 @@ func NewLogin(page *rod.Page) *LoginAction {
 func (a *LoginAction) CheckLoginStatus(ctx context.Context) (bool, error) {
 	// 加超时保护：只是查登录态的快速检查，不应无限挂（登录扫码的等待在 Login/WaitForLogin 里）
 	pp := a.page.Context(ctx).Timeout(30 * time.Second)
-	pp.MustNavigate("https://www.xiaohongshu.com/explore").MustWaitLoad()
+	pp.MustNavigate(loginExploreURL()).MustWaitLoad()
 
 	time.Sleep(1 * time.Second)
 
-	exists, _, err := pp.Has(`.main-container .user .link-wrapper .channel`)
+	authenticated, err := checkPageAuthenticated(pp)
 	if err != nil {
 		return false, errors.Wrap(err, "check login status failed")
 	}
-
-	if !exists {
-		return false, errors.Wrap(err, "login status element not found")
-	}
-
-	return true, nil
+	return authenticated, nil
 }
 
 // CurrentUser 当前登录用户的基础信息。
@@ -49,7 +44,15 @@ func (a *LoginAction) CurrentUser(ctx context.Context) (*CurrentUser, error) {
 
 	res, err := pp.Eval(`() => {
 		const u = window.__INITIAL_STATE__ && window.__INITIAL_STATE__.user;
-		const info = u && u.userInfo && u.userInfo.value !== undefined ? u.userInfo.value : (u && u.userInfo);
+		const unwrap = value => {
+			if (!value || typeof value !== "object") return value;
+			return value.value !== undefined ? value.value :
+				(value._value !== undefined ? value._value : value);
+		};
+		const candidates = u ? [u.userInfo, u.currentUser, u.me] : [];
+		const info = candidates.map(unwrap).find(value =>
+			value && typeof value === "object" && value.guest !== true &&
+			Boolean(value.userId || value.user_id || value.nickname));
 		if (!info || info.guest) return "";
 		return JSON.stringify({nickname: info.nickname, userId: info.userId || info.user_id});
 	}`)
@@ -74,7 +77,7 @@ func (a *LoginAction) Login(ctx context.Context) error {
 	pp := a.page.Context(ctx)
 
 	// 导航到小红书首页，这会触发二维码弹窗
-	pp.MustNavigate("https://www.xiaohongshu.com/explore").MustWaitLoad()
+	pp.MustNavigate(loginQRCodeURL()).MustWaitLoad()
 
 	time.Sleep(2 * time.Second)
 
@@ -88,10 +91,10 @@ func (a *LoginAction) Login(ctx context.Context) error {
 }
 
 func (a *LoginAction) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
-	pp := a.page.Context(ctx)
+	pp := a.page.Context(ctx).Timeout(45 * time.Second)
 
-	// 导航到小红书首页，这会触发二维码弹窗
-	pp.MustNavigate("https://www.xiaohongshu.com/explore").MustWaitLoad()
+	// REDnote requires /login; bound every browser/element wait.
+	pp.MustNavigate(loginQRCodeURL()).MustWaitLoad()
 
 	time.Sleep(2 * time.Second)
 
@@ -99,7 +102,11 @@ func (a *LoginAction) FetchQrcodeImage(ctx context.Context) (string, bool, error
 		return "", true, nil
 	}
 
-	src, err := pp.MustElement(".login-container .qrcode-img").Attribute("src")
+	qr, err := pp.Element(".login-container .qrcode-img")
+	if err != nil {
+		return "", false, errors.Wrap(err, "QR image not found before timeout; inspect the page in noVNC")
+	}
+	src, err := qr.Attribute("src")
 	if err != nil {
 		return "", false, errors.Wrap(err, "get qrcode src failed")
 	}
@@ -120,8 +127,8 @@ func (a *LoginAction) WaitForLogin(ctx context.Context) bool {
 		case <-ctx.Done():
 			return false
 		case <-ticker.C:
-			el, err := pp.Element(".main-container .user .link-wrapper .channel")
-			if err == nil && el != nil {
+			authenticated, err := checkPageAuthenticated(pp)
+			if err == nil && authenticated {
 				return true
 			}
 		}
