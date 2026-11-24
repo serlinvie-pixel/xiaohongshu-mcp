@@ -106,7 +106,25 @@ func rednoteLoginDiagnostics(page *rod.Page) string {
 		const hasIdentity = infos.some(value => value.guest !== true &&
 			Boolean(value.userId || value.user_id || value.nickname));
 		const guest = infos.some(value => value.guest === true);
+		// Do not log raw URLs: path segments and query parameters may
+		// contain personal identifiers or one-time login tokens.
+		const pathname = location.pathname || "/";
+		const normalized = pathname.length > 1
+			? pathname.replace(/\\/+$, "") : pathname;
+		let pathCategory = "other";
+		if (normalized === "/") pathCategory = "home";
+		else if (normalized === "/login") pathCategory = "login";
+		else if (normalized === "/explore") pathCategory = "explore";
+		else if (/^\\/(user|profile)(\\/|$)/.test(normalized)) pathCategory = "profile";
+		else if (/^\\/(search|search_result)(\\/|$)/.test(normalized)) pathCategory = "search";
+		else if (/^\\/(notification|notifications)(\\/|$)/.test(normalized)) pathCategory = "notification";
+		else if (/^\\/(feed|discovery)(\\/|$)/.test(normalized)) pathCategory = "feed";
 		return JSON.stringify({
+			path_category: pathCategory,
+			path_segment_count: pathname.split("/").filter(Boolean).length,
+			path_trailing_slash: pathname.length > 1 && pathname.endsWith("/"),
+			query_present: Boolean(location.search),
+			page_ready: document.readyState,
 			rednote_origin: location.hostname === "rednote.com" ||
 				location.hostname.endsWith(".rednote.com"),
 			login_path: location.pathname === "/login",
