@@ -29,6 +29,15 @@ func (a *LoginAction) CheckLoginStatus(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "check login status failed")
 	}
+	if useRednote() && !authenticated {
+		diag := rednoteLoginDiagnostics(pp)
+		hasSession, hasID, cookieErr := rednoteCookiePresence(pp)
+		if cookieErr != nil {
+			logrus.Warnf("REDnote status diagnostic: %s cookie_metadata_unavailable=true", diag)
+		} else {
+			logrus.Infof("REDnote status diagnostic: %s web_session_present=%t id_token_present=%t", diag, hasSession, hasID)
+		}
+	}
 	return authenticated, nil
 }
 
