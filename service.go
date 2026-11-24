@@ -9,9 +9,6 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/headless_browser"
-	"github.com/xpzouying/xiaohongshu-mcp/browser"
-	"github.com/xpzouying/xiaohongshu-mcp/configs"
 	"github.com/xpzouying/xiaohongshu-mcp/cookies"
 	"github.com/xpzouying/xiaohongshu-mcp/pkg/downloader"
 	"github.com/xpzouying/xiaohongshu-mcp/pkg/xhsutil"
@@ -99,6 +96,9 @@ type UserProfileResponse struct {
 
 // DeleteCookies 删除 cookies 文件，用于登录重置
 func (s *XiaohongshuService) DeleteCookies(ctx context.Context) error {
+	if persistentProfileDir() != "" {
+		return fmt.Errorf("已启用 REDnote 持久浏览器：delete_cookies 无法清除浏览器资料目录。请先停用容器并单独备份/清理资料目录，避免产生假退出登录")
+	}
 	cookiePath := cookies.GetCookiesFilePath()
 	cookieLoader := cookies.NewLoadCookie(cookiePath)
 	return cookieLoader.DeleteCookies()
@@ -148,6 +148,13 @@ func (s *XiaohongshuService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRe
 	}()
 
 	page := b.NewPage()
+	// In shared-browser mode the per-tool Close is intentionally a no-op:
+	// always close the QR page explicitly unless the background scan owns it.
+	defer func() {
+		if !handedOff {
+			_ = page.Close()
+		}
+	}()
 	loginAction := xiaohongshu.NewLogin(page)
 
 	img, loggedIn, err := loginAction.FetchQrcodeImage(ctx)
@@ -187,6 +194,7 @@ func (s *XiaohongshuService) waitScanInBackground(
 
 	go func() {
 		defer closeBrowser()
+		defer func() { _ = page.Close() }()
 		defer cancel()
 		defer s.logins.finish(seq)
 
@@ -621,13 +629,6 @@ func (s *XiaohongshuService) ReplyNotification(ctx context.Context, commentID, c
 	defer page.Close()
 
 	return xiaohongshu.NewNotificationAction(page).Reply(ctx, commentID, content)
-}
-
-func newBrowser() *headless_browser.Browser {
-	return browser.NewBrowser(configs.IsHeadless(),
-		browser.WithFingerprintSeed(configs.FingerprintSeed()),
-		browser.WithProxy(configs.Proxy()),
-	)
 }
 
 func saveCookies(page *rod.Page) error {
