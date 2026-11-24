@@ -3,6 +3,8 @@ package browser
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -15,6 +17,9 @@ type browserConfig struct {
 	fingerprintSeed int
 	// proxy 代理地址；非空时启用。
 	proxy string
+	// profileDir enables an on-disk Chromium user profile (opt-in).
+	// Never launch two Chromium processes against the same profile directory.
+	profileDir string
 }
 
 type Option func(*browserConfig)
@@ -30,6 +35,14 @@ func WithProxy(proxy string) Option {
 func WithFingerprintSeed(seed int) Option {
 	return func(c *browserConfig) {
 		c.fingerprintSeed = seed
+	}
+}
+
+// WithProfileDir retains Chromium's own site storage across restarts.
+// Requires the caller to keep only one Chromium process open for this path.
+func WithProfileDir(path string) Option {
+	return func(c *browserConfig) {
+		c.profileDir = path
 	}
 }
 
@@ -62,6 +75,23 @@ func NewBrowser(headless bool, options ...Option) *headless_browser.Browser {
 		panic(fmt.Sprintf("内置浏览器不可用，拒绝启动: %v", err))
 	}
 
+	flags := map[string]string{"fingerprint-brand": "Chrome"}
+	if cfg.profileDir != "" {
+		// This directory contains sensitive login state, not just cached pages.
+		// Refuse relative paths so a container workdir change cannot redirect it.
+		if !filepath.IsAbs(cfg.profileDir) {
+			panic("浏览器资料目录必须是绝对路径")
+		}
+		if err := os.MkdirAll(cfg.profileDir, 0700); err != nil {
+			panic(fmt.Sprintf("创建浏览器资料目录失败: %v", err))
+		}
+		if err := os.Chmod(cfg.profileDir, 0700); err != nil {
+			panic(fmt.Sprintf("设置浏览器资料目录权限失败: %v", err))
+		}
+		flags["user-data-dir"] = cfg.profileDir
+		logrus.Info("persistent Chromium profile enabled (login data stays on disk)")
+	}
+
 	opts := []headless_browser.Option{
 		headless_browser.WithHeadless(headless),
 		// 用内置浏览器的默认配置，不强制 UA。
@@ -70,7 +100,7 @@ func NewBrowser(headless bool, options ...Option) *headless_browser.Browser {
 		headless_browser.WithLanguage("zh-CN"), // 面向小红书
 		// 品牌报 Chrome。
 		// 注：hardware-concurrency 不设，交给 seed 派生。
-		headless_browser.WithExtraFlags(map[string]string{"fingerprint-brand": "Chrome"}),
+		headless_browser.WithExtraFlags(flags),
 	}
 	opts = append(opts, headless_browser.WithChromeBinPath(binPath))
 
@@ -86,15 +116,18 @@ func NewBrowser(headless bool, options ...Option) *headless_browser.Browser {
 		logrus.Infof("fingerprint seed pinned: %d", cfg.fingerprintSeed)
 	}
 
-	// 加载 cookies
-	cookiePath := cookies.GetCookiesFilePath()
-	cookieLoader := cookies.NewLoadCookie(cookiePath)
-
-	if data, err := cookieLoader.LoadCookies(); err == nil {
-		opts = append(opts, headless_browser.WithCookies(string(data)))
-		logrus.Debugf("loaded cookies from filesuccessfully")
-	} else {
-		logrus.Warnf("failed to load cookies: %v", err)
+	// In profile mode Chromium restores its own cookies and site storage.
+	// Do not overwrite this with an older cookies.json snapshot on startup.
+	// The legacy cookies-only mode remains unchanged for domestic users.
+	if cfg.profileDir == "" {
+		cookiePath := cookies.GetCookiesFilePath()
+		cookieLoader := cookies.NewLoadCookie(cookiePath)
+		if data, err := cookieLoader.LoadCookies(); err == nil {
+			opts = append(opts, headless_browser.WithCookies(string(data)))
+			logrus.Debugf("loaded cookies from file successfully")
+		} else {
+			logrus.Warnf("failed to load cookies: %v", err)
+		}
 	}
 
 	return headless_browser.New(opts...)

@@ -53,3 +53,8 @@ docker/docker-compose.override.yml
 # 本地分析/调试产物，不进仓库
 debug/
 .worktrees/
+
+# Local VPS deployment, browser profile, tokens and login data (never commit)
+/deploy/private-mcp/
+/docker/novnc/data/
+/docker/novnc/images/

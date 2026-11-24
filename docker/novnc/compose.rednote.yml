@@ -1,0 +1,13 @@
+# Add this file after compose.yml with -f to test REDnote login.
+# Retains original ports, token and persistent volume configuration.
+services:
+  xiaohongshu-mcp:
+    image: xiaohongshu-mcp:novnc-rednote-local
+    build:
+      context: ../..
+      dockerfile: docker/novnc/Dockerfile.rednote
+    environment:
+      XHS_BACKEND: rednote
+      # Reuse the same Chromium identity and site storage after a restart.
+      # /app/data is already backed by XHS_DATA_DIR in compose.yml.
+      XHS_BROWSER_PROFILE_DIR: /app/data/rednote-chromium

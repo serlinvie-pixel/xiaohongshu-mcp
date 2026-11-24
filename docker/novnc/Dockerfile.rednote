@@ -1,0 +1,12 @@
+# syntax=docker/dockerfile:1.6
+# Build this fork's MCP binary, then place it in the official noVNC desktop image.
+# The original noVNC entrypoint and browser remain intact.
+FROM golang:1.27.3 AS builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -p 2 -ldflags="-s -w -X main.version=rednote-login-dev" -o /out/app .
+
+FROM xpzouying/xiaohongshu-mcp:novnc
+COPY --from=builder /out/app /app/app
