@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type LoginAction struct {
@@ -98,7 +99,7 @@ func (a *LoginAction) FetchQrcodeImage(ctx context.Context) (string, bool, error
 
 	time.Sleep(2 * time.Second)
 
-	if exists, _, _ := pp.Has(".main-container .user .link-wrapper .channel"); exists {
+	if authenticated, err := checkPageAuthenticated(pp); err == nil && authenticated {
 		return "", true, nil
 	}
 
@@ -122,14 +123,33 @@ func (a *LoginAction) WaitForLogin(ctx context.Context) bool {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
+	// Only treat a newly created cookie pair as login completion.
+	// Existing cookies may be stale and are not proof of a live session.
+	hadRednoteSession := false
+	if useRednote() {
+		hadRednoteSession, _ = rednoteSessionCookiePresent(pp)
+	}
 	for {
 		select {
 		case <-ctx.Done():
+			if useRednote() {
+				present, err := rednoteSessionCookiePresent(pp)
+				if err == nil {
+					logrus.Infof("REDnote QR session ended without page identity: session_cookies_present=%t session_cookies_preexisting=%t", present, hadRednoteSession)
+				}
+			}
 			return false
 		case <-ticker.C:
 			authenticated, err := checkPageAuthenticated(pp)
 			if err == nil && authenticated {
 				return true
+			}
+			if useRednote() {
+				present, cookieErr := rednoteSessionCookiePresent(pp)
+				if cookieErr == nil && present && !hadRednoteSession {
+					logrus.Info("REDnote QR login: fresh session cookies observed, saving session")
+					return true
+				}
 			}
 		}
 	}
