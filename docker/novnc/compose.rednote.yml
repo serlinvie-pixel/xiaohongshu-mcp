@@ -1,0 +1,10 @@
+# Add this file after compose.yml with -f to test REDnote login.
+# Retains original ports, token and persistent volume configuration.
+services:
+  xiaohongshu-mcp:
+    image: xiaohongshu-mcp:novnc-rednote-local
+    build:
+      context: ../..
+      dockerfile: docker/novnc/Dockerfile.rednote
+    environment:
+      XHS_BACKEND: rednote
