@@ -59,3 +59,32 @@ func checkPageAuthenticated(page *rod.Page) (bool, error) {
 	}
 	return res.Value.Bool(), nil
 }
+
+
+// rednoteSessionCookiePresent is a scan-only fallback for REDnote's login
+// redirect, which sometimes fails to populate the old sidebar or page-state
+// identity before the login popup closes. No cookie values are ever logged.
+// This must not be used as a general login-status check: cookies can be stale.
+func rednoteSessionCookiePresent(page *rod.Page) (bool, error) {
+	cks, err := page.Browser().GetCookies()
+	if err != nil {
+		return false, err
+	}
+	hasSession, hasIdentity := false, false
+	for _, c := range cks {
+		if c == nil || c.Value == "" {
+			continue
+		}
+		domain := strings.TrimPrefix(strings.ToLower(c.Domain), ".")
+		if domain != "rednote.com" && !strings.HasSuffix(domain, ".rednote.com") {
+			continue
+		}
+		switch c.Name {
+		case "web_session":
+			hasSession = true
+		case "id_token":
+			hasIdentity = true
+		}
+	}
+	return hasSession && hasIdentity, nil
+}
